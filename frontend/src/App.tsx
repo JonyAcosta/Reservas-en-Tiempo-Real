@@ -45,15 +45,15 @@ export default function App() {
       setSlots((prev) =>
         prev.map((s) => (s.id === slotId ? { ...s, status: 'booked', lockedByMe: false } : s))
       );
-      if (selectedSlot?.id === slotId) setSelectedSlot(null);
+      setSelectedSlot((curr) => (curr?.id === slotId ? null : curr));
     });
 
-    // Evento en tiempo real: el bloqueo venció o se liberó
+    // Evento en tiempo real: el bloqueo venció o se liberó voluntariamente
     socket.on('slot:unlocked', ({ slotId }: { slotId: number }) => {
       setSlots((prev) =>
         prev.map((s) => (s.id === slotId ? { ...s, status: 'available', lockedByMe: false } : s))
       );
-      setSelectedSlot((current) => (current?.id === slotId ? null : current));
+      setSelectedSlot((curr) => (curr?.id === slotId ? null : curr));
     });
 
     // Evento en tiempo real: reset global
@@ -70,7 +70,7 @@ export default function App() {
       socket.off('slot:unlocked');
       socket.off('slots:reset');
     };
-  }, [selectedSlot]);
+  }, []); // Array vacío para mantener la suscripción a los sockets estable y sin interrupciones
 
   // Al hacer clic en una tarjeta disponible -> Disparar bloqueo atómico en Redis
   const handleSlotClick = async (slot: Slot) => {
@@ -85,7 +85,6 @@ export default function App() {
 
       if (res.ok) {
         const data = await res.json();
-        // Si el backend envía la duración configurada, sincronizamos el temporizador del modal
         if (data.ttlSeconds) {
           setLockTtl(data.ttlSeconds);
         }
@@ -95,6 +94,29 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error al bloquear turno:', err);
+    }
+  };
+
+  // 🔓 Cancelación manual: actualiza el estado local al instante y avisa al backend
+  const handleCancelBooking = async () => {
+    if (!selectedSlot) return;
+
+    const slotIdToUnlock = selectedSlot.id;
+
+    // Actualización inmediata en la pantalla actual
+    setSelectedSlot(null);
+    setSlots((prev) =>
+      prev.map((s) => (s.id === slotIdToUnlock ? { ...s, status: 'available', lockedByMe: false } : s))
+    );
+
+    try {
+      await fetch(`${BACKEND_URL}/api/slots/${slotIdToUnlock}/unlock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: USER_ID }),
+      });
+    } catch (err) {
+      console.error('Error al liberar turno:', err);
     }
   };
 
@@ -239,7 +261,7 @@ export default function App() {
           slot={selectedSlot}
           totalSeconds={lockTtl}
           loading={loading}
-          onClose={() => setSelectedSlot(null)}
+          onClose={handleCancelBooking}
           onConfirm={handleConfirmBooking}
         />
       )}

@@ -27,7 +27,7 @@ export class BookingController {
         return;
       }
 
-      // Le pasamos el callback al servicio: se ejecuta solo cuando expira el TTL
+      // Callback al expirar el TTL
       const locked = await bookingService.lockSlot(slotId, userId, () => {
         // 📢 Avisa a todos los clientes que el turno volvió a estar disponible
         io.emit('slot:unlocked', { slotId });
@@ -41,13 +41,39 @@ export class BookingController {
       // 📢 Notificamos a TODOS los clientes conectados que este turno quedó bloqueado
       io.emit('slot:locked', { slotId, userId });
 
-      // En booking.controller.ts
-res.json({ 
-  message: 'Turno bloqueado temporalmente', 
-  slotId, 
-  userId,
-  ttlSeconds: bookingService.getLockTtl() // o devolvés la duración
-});
+      res.json({ 
+        message: 'Turno bloqueado temporalmente', 
+        slotId, 
+        userId,
+        ttlSeconds: bookingService.getLockTtl()
+      });
+    } catch (error) {
+      res.status(400).json({ message: (error as Error).message });
+    }
+  }
+
+  // POST /api/slots/:id/unlock
+  static async unlock(req: Request, res: Response): Promise<void> {
+    try {
+      const slotId = Number(req.params.id);
+      const { userId } = req.body;
+
+      if (!userId) {
+        res.status(400).json({ message: 'El userId es obligatorio' });
+        return;
+      }
+
+      const unlocked = await bookingService.unlockSlot(slotId, userId);
+
+      if (!unlocked) {
+        res.status(400).json({ message: 'El turno no estaba bloqueado o ya expiró' });
+        return;
+      }
+
+      // 📢 Avisamos por WebSockets a todos que el turno fue liberado de inmediato
+      io.emit('slot:unlocked', { slotId });
+
+      res.json({ message: 'Turno liberado con éxito', slotId });
     } catch (error) {
       res.status(400).json({ message: (error as Error).message });
     }

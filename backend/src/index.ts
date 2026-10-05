@@ -13,7 +13,6 @@ const PORT = process.env.PORT || 3000;
 // Middlewares
 app.use(cors());
 app.use(express.json());
-app.post('/api/slots/reset', BookingController.reset);
 
 // 1. Creamos el servidor HTTP nativo envolviendo a Express
 const server = http.createServer(app);
@@ -42,9 +41,11 @@ app.get('/health', async (req: Request, res: Response) => {
 
 app.get('/api/slots', BookingController.getSlots);
 app.post('/api/slots/:id/lock', BookingController.lock);
+app.post('/api/slots/:id/unlock', BookingController.unlock); // 🔓 Liberación manual
 app.post('/api/bookings/confirm', BookingController.confirm);
+app.post('/api/slots/reset', BookingController.reset);
 
-// 4. IMPORTANTE: Levantamos `server.listen` en lugar de `app.listen`
+// 4. Levantamos server.listen en lugar de app.listen
 server.listen(PORT, () => {
   console.log(`🚀 Servidor backend y WebSockets corriendo en http://localhost:${PORT}`);
 });
