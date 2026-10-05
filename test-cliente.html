@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Prueba WebSockets en Tiempo Real</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 24px;
+      background: #0f172a;
+      color: #f8fafc;
+    }
+    h1 { margin-bottom: 8px; font-size: 1.5rem; }
+    #status {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+      background: #ef4444;
+      color: white;
+    }
+    .status-connected { background: #22c55e !important; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      border: 1px solid #334155;
+      padding: 16px;
+      border-radius: 8px;
+      background: #1e293b;
+      transition: all 0.2s ease;
+    }
+    .card.available { border-left: 6px solid #22c55e; }
+    .card.locked { border-left: 6px solid #eab308; background: #292524; }
+    .card.booked { border-left: 6px solid #ef4444; opacity: 0.6; }
+    .badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      font-weight: bold;
+    }
+    .badge.available { background: #166534; color: #bbf7d0; }
+    .badge.locked { background: #854d0e; color: #fef08a; }
+    .badge.booked { background: #991b1b; color: #fecaca; }
+    #logs {
+      background: #020617;
+      border: 1px solid #1e293b;
+      padding: 12px;
+      border-radius: 6px;
+      height: 160px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: #38bdf8;
+    }
+  </style>
+  <!-- CDN oficial de Socket.io Client -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+
+  <h1>Monitor de Turnos en Tiempo Real</h1>
+  <div id="status">Desconectado</div>
+
+  <div class="grid" id="slots-container">
+    <!-- Se llenará con la API -->
+  </div>
+
+  <h3>Registro de eventos en vivo:</h3>
+  <div id="logs"></div>
+
+  <script>
+    const socket = io('http://localhost:3000');
+    const statusEl = document.getElementById('status');
+    const logsEl = document.getElementById('logs');
+    const slotsContainer = document.getElementById('slots-container');
+
+    function log(msg) {
+      const time = new Date().toLocaleTimeString();
+      logsEl.innerHTML = `<div>[${time}] ${msg}</div>` + logsEl.innerHTML;
+    }
+
+    // 1. Estado de conexión
+    socket.on('connect', () => {
+      statusEl.textContent = `Conectado (ID: ${socket.id})`;
+      statusEl.classList.add('status-connected');
+      log(`Conectado al servidor de WebSockets`);
+      cargarSlots();
+    });
+
+    socket.on('disconnect', () => {
+      statusEl.textContent = 'Desconectado';
+      statusEl.classList.remove('status-connected');
+      log('Desconectado del servidor');
+    });
+
+    // 2. Carga inicial vía HTTP GET
+    async function cargarSlots() {
+      try {
+        const res = await fetch('http://localhost:3000/api/slots');
+        const slots = await res.json();
+        renderSlots(slots);
+      } catch (err) {
+        log('Error cargando slots: ' + err.message);
+      }
+    }
+
+    function renderSlots(slots) {
+      slotsContainer.innerHTML = '';
+      slots.forEach(slot => {
+        const div = document.createElement('div');
+        div.id = `slot-${slot.id}`;
+        div.className = `card ${slot.status}`;
+        div.innerHTML = `
+          <strong>Turno #${slot.id}</strong><br>
+          <small>${new Date(slot.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} hs</small><br><br>
+          <span class="badge ${slot.status}" id="badge-${slot.id}">${slot.status}</span>
+        `;
+        slotsContainer.appendChild(div);
+      });
+    }
+
+    // 3. Escuchar evento: Turno Bloqueado
+    socket.on('slot:locked', (data) => {
+      log(`⚡ Evento 'slot:locked' recibido -> Turno #${data.slotId} bloqueado por ${data.userId}`);
+      const card = document.getElementById(`slot-${data.slotId}`);
+      const badge = document.getElementById(`badge-${data.slotId}`);
+      if (card && badge) {
+        card.className = 'card locked';
+        badge.className = 'badge locked';
+        badge.textContent = 'locked';
+      }
+    });
+
+    // 4. Escuchar evento: Turno Confirmado definitivamente
+    socket.on('slot:booked', (data) => {
+      log(`🔥 Evento 'slot:booked' recibido -> Turno #${data.slotId} confirmado (Reserva #${data.bookingId})`);
+      const card = document.getElementById(`slot-${data.slotId}`);
+      const badge = document.getElementById(`badge-${data.slotId}`);
+      if (card && badge) {
+        card.className = 'card booked';
+        badge.className = 'badge booked';
+        badge.textContent = 'booked';
+      }
+
+      // 5. Escuchar evento: Reset global de turnos
+socket.on('slots:reset', () => {
+  log(`🔄 Evento 'slots:reset' recibido -> Recargando todos los turnos`);
+  cargarSlots();
+});
+// Escuchar evento: Reset global de turnos
+    socket.on('slots:reset', () => {
+      log("🔄 Evento 'slots:reset' recibido -> Recargando todos los turnos");
+      cargarSlots();
+    });
+    });
+  </script>
+</body>
+</html>
