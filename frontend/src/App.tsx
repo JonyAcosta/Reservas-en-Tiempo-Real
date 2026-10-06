@@ -1,15 +1,25 @@
 import { useEffect, useState } from 'react';
 import { socket } from './socket';
 import type { Slot } from './types';
-import { Clock, Lock, CheckCircle2, RotateCcw, Sparkles, CalendarDays } from 'lucide-react';
+import { 
+  Clock, 
+  Lock, 
+  CheckCircle2, 
+  RotateCcw, 
+  CalendarDays, 
+  LayoutDashboard, 
+  Calendar,
+  Layers
+} from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { BookingModal } from './booking.modal';
 import { MyBookingsModal } from './MyBookingsModal';
+import { DashboardView } from './DashboardView';
+import { ParticlesBackground } from './ParticlesBackground';
 
 const BACKEND_URL = 'http://localhost:3000';
 const USER_ID = `user_${Math.random().toString(36).substring(2, 9)}`;
 
-// Función para mostrar la hora limpia (ej: 10:00 hs)
 function formatSlotTime(timeStr: string) {
   if (!timeStr) return '--:--';
   if (timeStr.includes('T')) {
@@ -20,13 +30,13 @@ function formatSlotTime(timeStr: string) {
 }
 
 export default function App() {
+  const [currentView, setCurrentView] = useState<'dashboard' | 'booking'>('dashboard');
   const [slots, setSlots] = useState<Slot[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [lockTtl, setLockTtl] = useState(60);
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
 
-  // Email persistido localmente para identificar "Mis Reservas"
   const [userEmail, setUserEmail] = useState<string>(() => localStorage.getItem('last_user_email') || '');
   const [showMyBookings, setShowMyBookings] = useState(false);
 
@@ -172,106 +182,179 @@ export default function App() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col items-center p-6 relative overflow-hidden">
-      {/* Luces de fondo */}
-      <div className="absolute top-[-15%] left-[20%] w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[15%] w-[450px] h-[450px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none" />
+  const availableCount = slots.filter((s) => s.status === 'available').length;
 
-      {/* Header */}
-      <header className="w-full max-w-4xl flex items-center justify-between py-6 border-b border-slate-800/80 mb-10 z-10">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent flex items-center gap-2">
-            Reservas Concurrentes <Sparkles className="w-5 h-5 text-cyan-400" />
-          </h1>
-          <p className="text-xs text-slate-400 mt-1 font-mono">
-            Node.js · PostgreSQL · Redis Lock · Socket.io
-          </p>
+  return (
+    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col items-center relative overflow-hidden font-sans">
+      {/* Fondo de Partículas global para toda la app */}
+      <ParticlesBackground />
+
+      {/* Luces sutiles de ambiente */}
+      <div className="absolute top-[-10%] left-[10%] w-[550px] h-[550px] bg-cyan-600/10 rounded-full blur-[160px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[10%] w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[160px] pointer-events-none" />
+
+      {/* Navbar Superior */}
+      <header className="w-full max-w-6xl flex items-center justify-between px-6 py-4 border-b border-slate-800/60 z-30 backdrop-blur-md bg-[#07090e]/70 sticky top-0">
+        <div 
+          onClick={() => setCurrentView('dashboard')}
+          className="flex items-center gap-3 cursor-pointer group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.3)] group-hover:scale-105 transition-transform">
+            <Layers className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-base font-bold tracking-tight text-white flex items-center gap-1.5 leading-none">
+              AsyncLock <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/60">v1.0</span>
+            </h1>
+            <span className="text-[11px] text-slate-500 font-mono">Distributed Booking Hub</span>
+          </div>
         </div>
 
+        {/* Selector de vistas */}
+        <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 text-xs">
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              currentView === 'dashboard'
+                ? 'bg-slate-800 text-white font-medium shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <LayoutDashboard className="w-3.5 h-3.5" />
+            <span>Dashboard</span>
+          </button>
+          <button
+            onClick={() => setCurrentView('booking')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              currentView === 'booking'
+                ? 'bg-slate-800 text-white font-medium shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Turnos</span>
+          </button>
+        </div>
+
+        {/* Acciones */}
         <div className="flex items-center gap-3">
-          {/* Botón Mis Reservas */}
           {userEmail && (
             <button
               onClick={() => setShowMyBookings(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-cyan-300 hover:text-white bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-800/60 rounded-lg transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-cyan-300 hover:text-white bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-800/60 rounded-lg transition-all cursor-pointer"
             >
               <CalendarDays className="w-3.5 h-3.5 text-cyan-400" />
-              Mis Reservas
+              <span>Mis Reservas</span>
             </button>
           )}
 
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-xs">
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-800 text-xs">
             <span
               className={`w-2 h-2 rounded-full ${
                 connected ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-rose-500'
               }`}
             />
-            <span className="text-slate-300 font-mono">{connected ? 'Online' : 'Offline'}</span>
+            <span className="text-slate-400 font-mono text-[11px]">{connected ? 'Live' : 'Offline'}</span>
           </div>
 
           <button
             onClick={handleReset}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-800 border border-slate-700/60 rounded-lg transition-all"
-            title="Resetear estados"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-400 hover:text-rose-400 bg-slate-900 border border-slate-800 hover:border-rose-900/60 rounded-lg transition-all cursor-pointer"
+            title="Resetear estados a available"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            Reset
           </button>
         </div>
       </header>
 
-      {/* Grilla de turnos */}
-      <main className="w-full max-w-4xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 z-10">
-        {slots.map((slot) => {
-          const isAvailable = slot.status === 'available';
-          const isLocked = slot.status === 'locked';
-          const isBooked = slot.status === 'booked';
-
-          return (
-            <div
-              key={slot.id}
-              onClick={() => handleSlotClick(slot)}
-              className={`group relative p-5 rounded-2xl border transition-all duration-300 cursor-pointer overflow-hidden backdrop-blur-md ${
-                isAvailable
-                  ? 'bg-slate-900/60 border-slate-800 hover:border-cyan-500/50 hover:shadow-[0_0_25px_rgba(6,182,212,0.15)] hover:-translate-y-1'
-                  : isLocked
-                  ? 'bg-amber-950/20 border-amber-500/30 cursor-not-allowed'
-                  : 'bg-rose-950/20 border-rose-500/30 cursor-not-allowed opacity-60'
-              }`}
-            >
-              <div className="flex justify-between items-start mb-4">
-                <span className="text-xs font-mono tracking-wider uppercase text-slate-400">
-                  Turno #{slot.id}
+      {/* Contenido principal condicional */}
+      <main className="w-full max-w-5xl py-8 px-4 z-20 flex-1">
+        {currentView === 'dashboard' ? (
+          <DashboardView
+            onEnterBooking={() => setCurrentView('booking')}
+            connected={connected}
+            totalSlots={slots.length}
+            availableCount={availableCount}
+          />
+        ) : (
+          <div className="animate-fade-in">
+            {/* Header de la sección de turnos */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 mb-6 border-b border-slate-800/80 gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-white tracking-tight">Turnos Disponibles</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Seleccioná un bloque horario para iniciar el bloqueo distribuido en Redis.
+                </p>
+              </div>
+              <div className="flex items-center gap-4 text-xs font-mono text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/30 border border-emerald-500" />
+                  Disponible ({availableCount})
                 </span>
-                {isAvailable && (
-                  <Clock className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 transition-colors" />
-                )}
-                {isLocked && <Lock className="w-4 h-4 text-amber-400 animate-pulse" />}
-                {isBooked && <CheckCircle2 className="w-4 h-4 text-rose-400" />}
-              </div>
-
-              {/* Formato de hora limpio */}
-              <div className="text-lg font-semibold text-white tracking-wide mb-3">
-                {formatSlotTime(slot.start_time)} hs
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span
-                  className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium tracking-wide ${
-                    isAvailable
-                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                      : isLocked
-                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                      : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                  }`}
-                >
-                  {isAvailable ? 'DISPONIBLE' : isLocked ? 'EN PROCESO' : 'RESERVADO'}
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500/30 border border-amber-500" />
+                  Bloqueado
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500/30 border border-rose-500" />
+                  Reservado
                 </span>
               </div>
             </div>
-          );
-        })}
+
+            {/* Grilla de turnos con tarjetas translúcidas para dejar ver las partículas */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {slots.map((slot) => {
+                const isAvailable = slot.status === 'available';
+                const isLocked = slot.status === 'locked';
+                const isBooked = slot.status === 'booked';
+
+                return (
+                  <div
+                    key={slot.id}
+                    onClick={() => handleSlotClick(slot)}
+                    className={`group relative p-5 rounded-2xl border transition-all duration-300 cursor-pointer overflow-hidden backdrop-blur-sm ${
+                      isAvailable
+                        ? 'bg-[#0b1220]/80 border-slate-800 hover:border-cyan-500/50 hover:shadow-[0_0_25px_rgba(6,182,212,0.15)] hover:-translate-y-1'
+                        : isLocked
+                        ? 'bg-amber-950/30 border-amber-500/30 cursor-not-allowed'
+                        : 'bg-rose-950/30 border-rose-500/30 cursor-not-allowed opacity-60'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <span className="text-xs font-mono tracking-wider uppercase text-slate-400">
+                        Turno #{slot.id}
+                      </span>
+                      {isAvailable && (
+                        <Clock className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 transition-colors" />
+                      )}
+                      {isLocked && <Lock className="w-4 h-4 text-amber-400 animate-pulse" />}
+                      {isBooked && <CheckCircle2 className="w-4 h-4 text-rose-400" />}
+                    </div>
+
+                    <div className="text-xl font-bold text-white tracking-wide mb-3 font-mono">
+                      {formatSlotTime(slot.start_time)} hs
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wider font-mono ${
+                          isAvailable
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : isLocked
+                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                        }`}
+                      >
+                        {isAvailable ? 'DISPONIBLE' : isLocked ? 'EN PROCESO' : 'RESERVADO'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Modal de confirmación de reserva */}
