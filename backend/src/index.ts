@@ -39,11 +39,16 @@ app.get('/health', async (req: Request, res: Response) => {
   res.json({ status: 'ok', message: 'Servidor y WebSockets activos' });
 });
 
+// Endpoints de turnos (Slots)
 app.get('/api/slots', BookingController.getSlots);
 app.post('/api/slots/:id/lock', BookingController.lock);
 app.post('/api/slots/:id/unlock', BookingController.unlock); // 🔓 Liberación manual
-app.post('/api/bookings/confirm', BookingController.confirm);
 app.post('/api/slots/reset', BookingController.reset);
+
+// Endpoints de reservas (Bookings)
+app.get('/api/bookings', BookingController.getMyBookings); // 📋 Listar mis reservas por email
+app.post('/api/bookings/confirm', BookingController.confirm);
+app.post('/api/bookings/:id/cancel', BookingController.cancelBooking); // ❌ Cancelar reserva confirmada
 
 // 4. Levantamos server.listen en lugar de app.listen
 server.listen(PORT, () => {

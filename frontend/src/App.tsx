@@ -1,22 +1,35 @@
 import { useEffect, useState } from 'react';
 import { socket } from './socket';
 import type { Slot } from './types';
-import { Clock, Lock, CheckCircle2, RotateCcw, Sparkles } from 'lucide-react';
+import { Clock, Lock, CheckCircle2, RotateCcw, Sparkles, CalendarDays } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { BookingModal } from './booking.modal';
+import { MyBookingsModal } from './MyBookingsModal';
 
 const BACKEND_URL = 'http://localhost:3000';
-// Identificador único para esta pestaña/sesión
 const USER_ID = `user_${Math.random().toString(36).substring(2, 9)}`;
+
+// Función para mostrar la hora limpia (ej: 10:00 hs)
+function formatSlotTime(timeStr: string) {
+  if (!timeStr) return '--:--';
+  if (timeStr.includes('T')) {
+    const d = new Date(timeStr);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  return timeStr.slice(0, 5);
+}
 
 export default function App() {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
-  const [lockTtl, setLockTtl] = useState(7); // Duración sincronizada dinámicamente con el backend
+  const [lockTtl, setLockTtl] = useState(60);
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
 
-  // Cargar estado inicial de los turnos desde la API REST
+  // Email persistido localmente para identificar "Mis Reservas"
+  const [userEmail, setUserEmail] = useState<string>(() => localStorage.getItem('last_user_email') || '');
+  const [showMyBookings, setShowMyBookings] = useState(false);
+
   const fetchSlots = async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/slots`);
@@ -33,14 +46,12 @@ export default function App() {
     socket.on('connect', () => setConnected(true));
     socket.on('disconnect', () => setConnected(false));
 
-    // Evento en tiempo real: alguien bloqueó un turno
     socket.on('slot:locked', ({ slotId, userId }: { slotId: number; userId: string }) => {
       setSlots((prev) =>
         prev.map((s) => (s.id === slotId ? { ...s, status: 'locked', lockedByMe: userId === USER_ID } : s))
       );
     });
 
-    // Evento en tiempo real: turno reservado definitivamente
     socket.on('slot:booked', ({ slotId }: { slotId: number }) => {
       setSlots((prev) =>
         prev.map((s) => (s.id === slotId ? { ...s, status: 'booked', lockedByMe: false } : s))
@@ -48,7 +59,6 @@ export default function App() {
       setSelectedSlot((curr) => (curr?.id === slotId ? null : curr));
     });
 
-    // Evento en tiempo real: el bloqueo venció o se liberó voluntariamente
     socket.on('slot:unlocked', ({ slotId }: { slotId: number }) => {
       setSlots((prev) =>
         prev.map((s) => (s.id === slotId ? { ...s, status: 'available', lockedByMe: false } : s))
@@ -56,7 +66,6 @@ export default function App() {
       setSelectedSlot((curr) => (curr?.id === slotId ? null : curr));
     });
 
-    // Evento en tiempo real: reset global
     socket.on('slots:reset', () => {
       fetchSlots();
       setSelectedSlot(null);
@@ -70,9 +79,8 @@ export default function App() {
       socket.off('slot:unlocked');
       socket.off('slots:reset');
     };
-  }, []); // Array vacío para mantener la suscripción a los sockets estable y sin interrupciones
+  }, []);
 
-  // Al hacer clic en una tarjeta disponible -> Disparar bloqueo atómico en Redis
   const handleSlotClick = async (slot: Slot) => {
     if (slot.status !== 'available') return;
 
@@ -97,13 +105,11 @@ export default function App() {
     }
   };
 
-  // 🔓 Cancelación manual: actualiza el estado local al instante y avisa al backend
   const handleCancelBooking = async () => {
     if (!selectedSlot) return;
 
     const slotIdToUnlock = selectedSlot.id;
 
-    // Actualización inmediata en la pantalla actual
     setSelectedSlot(null);
     setSlots((prev) =>
       prev.map((s) => (s.id === slotIdToUnlock ? { ...s, status: 'available', lockedByMe: false } : s))
@@ -120,7 +126,6 @@ export default function App() {
     }
   };
 
-  // Confirmar reserva en PostgreSQL
   const handleConfirmBooking = async (name: string, email: string) => {
     if (!selectedSlot) return;
 
@@ -138,6 +143,9 @@ export default function App() {
       });
 
       if (res.ok) {
+        setUserEmail(email);
+        localStorage.setItem('last_user_email', email);
+
         confetti({
           particleCount: 90,
           spread: 75,
@@ -156,7 +164,6 @@ export default function App() {
     }
   };
 
-  // Reset rápido para pruebas
   const handleReset = async () => {
     try {
       await fetch(`${BACKEND_URL}/api/slots/reset`, { method: 'POST' });
@@ -182,7 +189,18 @@ export default function App() {
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* Botón Mis Reservas */}
+          {userEmail && (
+            <button
+              onClick={() => setShowMyBookings(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-cyan-300 hover:text-white bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-800/60 rounded-lg transition-all"
+            >
+              <CalendarDays className="w-3.5 h-3.5 text-cyan-400" />
+              Mis Reservas
+            </button>
+          )}
+
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-xs">
             <span
               className={`w-2 h-2 rounded-full ${
@@ -233,8 +251,9 @@ export default function App() {
                 {isBooked && <CheckCircle2 className="w-4 h-4 text-rose-400" />}
               </div>
 
+              {/* Formato de hora limpio */}
               <div className="text-lg font-semibold text-white tracking-wide mb-3">
-                {slot.start_time.slice(0, 5)} hs
+                {formatSlotTime(slot.start_time)} hs
               </div>
 
               <div className="flex items-center gap-2">
@@ -255,7 +274,7 @@ export default function App() {
         })}
       </main>
 
-      {/* Modal con barra de progreso y temporizador dinámico */}
+      {/* Modal de confirmación de reserva */}
       {selectedSlot && (
         <BookingModal
           slot={selectedSlot}
@@ -263,6 +282,17 @@ export default function App() {
           loading={loading}
           onClose={handleCancelBooking}
           onConfirm={handleConfirmBooking}
+        />
+      )}
+
+      {/* Modal Mis Reservas */}
+      {showMyBookings && (
+        <MyBookingsModal
+          userEmail={userEmail}
+          onClose={() => setShowMyBookings(false)}
+          onBookingCancelled={() => {
+            fetchSlots();
+          }}
         />
       )}
     </div>

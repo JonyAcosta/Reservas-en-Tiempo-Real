@@ -5,8 +5,8 @@ import type { Slot, BookingResponse, ConfirmBookingRequest } from '../contracts/
 
 export class BookingService {
   private repository: BookingRepository;
-  // Cambiá este valor cuando quieras (para pruebas rápidas, 300 para 5 minutos)
-  private readonly LOCK_TTL_SECONDS = 60; 
+  // Cambiá este valor cuando quieras (ej: 60 segundos para pruebas, 300 para 5 minutos)
+  private readonly LOCK_TTL_SECONDS = 60;
   private lockTimers: Map<number, NodeJS.Timeout> = new Map();
 
   constructor() {
@@ -121,6 +121,39 @@ export class BookingService {
     await redis.del(lockKey);
 
     return booking;
+  }
+
+  /**
+   * Obtiene todas las reservas activas asociadas a un email
+   */
+  async getUserBookings(email: string) {
+    if (!email) {
+      throw new Error('El email es obligatorio');
+    }
+    return await this.repository.getBookingsByUserEmail(email);
+  }
+
+  /**
+   * Cancela una reserva confirmada y libera el turno a 'available'
+   */
+  async cancelConfirmedBooking(bookingId: number, userEmail: string): Promise<{ slotId: number }> {
+    const booking = await this.repository.getBookingById(bookingId);
+
+    if (!booking) {
+      throw new Error('Reserva no encontrada');
+    }
+
+    if (booking.userEmail !== userEmail) {
+      throw new Error('No tenés permisos para cancelar esta reserva');
+    }
+
+    // 1. Eliminamos el registro de la reserva en la base de datos
+    await this.repository.deleteBooking(bookingId);
+
+    // 2. Liberamos el turno volviéndolo a 'available' en PostgreSQL
+    await this.repository.updateSlotStatus(booking.slotId, 'available');
+
+    return { slotId: booking.slotId };
   }
 
   async resetAll(): Promise<void> {

@@ -44,4 +44,40 @@ export class BookingRepository {
     return result.rows[0];
     
   }
+  // Obtener reservas por email de usuario (con JOIN al turno)
+  async getBookingsByUserEmail(email: string): Promise<any[]> {
+    const query = `
+      SELECT 
+        b.id, 
+        b.slot_id as "slotId", 
+        b.user_name as "userName", 
+        b.user_email as "userEmail", 
+        b.status, 
+        b.created_at as "createdAt",
+        s.start_time as "startTime",
+        s.end_time as "endTime"
+      FROM bookings b
+      INNER JOIN slots s ON s.id = b.slot_id
+      WHERE b.user_email = $1
+      ORDER BY b.created_at DESC
+    `;
+    const result = await pool.query(query, [email]);
+    return result.rows;
+  }
+
+  // Obtener una reserva por ID
+  async getBookingById(bookingId: number): Promise<any | null> {
+    const query = `
+      SELECT id, slot_id as "slotId", user_name as "userName", user_email as "userEmail", status
+      FROM bookings
+      WHERE id = $1
+    `;
+    const result = await pool.query(query, [bookingId]);
+    return result.rows[0] || null;
+  }
+
+  // Eliminar una reserva confirmada
+  async deleteBooking(bookingId: number): Promise<void> {
+    await pool.query('DELETE FROM bookings WHERE id = $1', [bookingId]);
+  }
 }
